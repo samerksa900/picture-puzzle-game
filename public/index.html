@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>أحجية الصور</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+
+  <!-- ========== LOBBY SCREEN ========== -->
+  <div id="lobby-screen" class="screen active">
+    <div class="lobby-container">
+      <div class="logo-section">
+        <div class="logo-icon">🧩</div>
+        <h1>أحجية الصور</h1>
+        <p class="subtitle">ركّب الصور واحزر الجواب!</p>
+      </div>
+
+      <div class="lobby-cards">
+        <!-- Create Room -->
+        <div class="lobby-card create-card">
+          <div class="card-icon">🎮</div>
+          <h2>أنشئ غرفة</h2>
+          <input type="text" id="host-name" placeholder="اسمك" maxlength="15" class="input-field">
+          <button id="create-btn" class="btn btn-primary">أنشئ غرفة جديدة</button>
+        </div>
+
+        <!-- Join Room -->
+        <div class="lobby-card join-card">
+          <div class="card-icon">🚪</div>
+          <h2>انضم لغرفة</h2>
+          <input type="text" id="player-name" placeholder="اسمك" maxlength="15" class="input-field">
+          <input type="text" id="room-code-input" placeholder="رمز الغرفة" maxlength="4" class="input-field code-input"
+            style="text-transform: uppercase;">
+
+          <!-- Team Selection -->
+          <div id="team-select-area" class="team-select-area hidden">
+            <p class="team-select-label">اختر فريقك:</p>
+            <div class="team-select-buttons">
+              <button class="team-select-btn red-select" data-team="red">
+                <span class="team-dot red-dot"></span>
+                <span>الأحمر</span>
+                <span class="team-count" id="red-count-display">(0/2)</span>
+              </button>
+              <button class="team-select-btn blue-select" data-team="blue">
+                <span class="team-dot blue-dot"></span>
+                <span>الأزرق</span>
+                <span class="team-count" id="blue-count-display">(0/2)</span>
+              </button>
+            </div>
+          </div>
+
+          <button id="join-btn" class="btn btn-secondary" disabled>انضم</button>
+          <div id="join-error" class="error-msg hidden"></div>
+        </div>
+      </div>
+
+      <div id="lobby-error" class="error-msg hidden"></div>
+    </div>
+  </div>
+
+  <!-- ========== GAME SCREEN ========== -->
+  <div id="game-screen" class="screen">
+    <div class="game-container">
+
+      <!-- Header -->
+      <div class="game-header">
+        <div class="room-info">
+          <span class="room-badge">🧩 الغرفة: <strong id="display-room-code"></strong></span>
+          <span class="round-badge" id="round-badge">الجولة: --</span>
+        </div>
+        <div class="score-board">
+          <div class="score-team score-red">
+            <span class="team-dot red-dot"></span>
+            <span>الأحمر</span>
+            <strong id="score-red">0</strong>
+          </div>
+          <span class="score-vs">VS</span>
+          <div class="score-team score-blue">
+            <span class="team-dot blue-dot"></span>
+            <span>الأزرق</span>
+            <strong id="score-blue">0</strong>
+          </div>
+        </div>
+      </div>
+
+      <!-- HOST CONTROLS -->
+      <div id="host-section" class="host-section hidden">
+        <div class="host-panel">
+          <h3>🎮 لوحة التحكم</h3>
+
+          <div id="upload-area" class="upload-area">
+            <div class="upload-header">
+              <label>عدد الصور:</label>
+              <div class="image-count-selector">
+                <button class="count-btn active" data-count="2">2</button>
+                <button class="count-btn" data-count="3">3</button>
+                <button class="count-btn" data-count="4">4</button>
+              </div>
+            </div>
+            <div id="image-slots" class="image-slots"></div>
+            <div class="answer-section">
+              <input type="text" id="answer-input" placeholder="اكتب الجواب (مخفي عن الفرق)..."
+                class="input-field answer-field">
+            </div>
+            <button id="start-round-btn" class="btn btn-success" disabled>🚀 ابدأ الجولة</button>
+          </div>
+
+          <!-- Judge controls -->
+          <div id="judge-controls" class="judge-controls hidden">
+            <div class="judge-info">
+              <div class="buzzer-name-display">
+                <span>🔔 ضغط الزر:</span>
+                <strong id="buzzed-player-name"></strong>
+                <span id="buzzed-team-badge" class="buzzed-team-badge"></span>
+              </div>
+              <div class="judge-answer-hint">
+                <span>الجواب:</span>
+                <strong id="judge-answer-text"></strong>
+              </div>
+            </div>
+            <div class="judge-buttons">
+              <button id="judge-correct-btn" class="btn btn-correct">✅ صح</button>
+              <button id="judge-wrong-btn" class="btn btn-wrong">❌ خطأ</button>
+            </div>
+          </div>
+
+          <!-- Host action buttons (skip, unblock, new round) -->
+          <div id="host-actions" class="host-actions hidden">
+            <div class="host-actions-row">
+              <button id="skip-round-btn" class="btn btn-skip">⏭️ تخطي الجولة</button>
+              <button id="new-round-btn" class="btn btn-primary">🔄 جولة جديدة</button>
+            </div>
+            <!-- Unblock buttons -->
+            <div id="unblock-area" class="unblock-area hidden">
+              <p class="unblock-label">أرجع فريق يجاوب:</p>
+              <div class="unblock-buttons">
+                <button id="unblock-red-btn" class="btn btn-unblock-red hidden">🔓 رجّع الأحمر</button>
+                <button id="unblock-blue-btn" class="btn btn-unblock-blue hidden">🔓 رجّع الأزرق</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IMAGES DISPLAY -->
+      <div id="images-display" class="images-display hidden"></div>
+
+      <!-- BUZZ BUTTON (for players) -->
+      <div id="buzz-section" class="buzz-section hidden">
+        <button id="buzz-btn" class="buzz-button">
+          <span class="buzz-icon">🔔</span>
+          <span class="buzz-text">اضغط!</span>
+        </button>
+      </div>
+
+      <!-- BUZZED STATUS -->
+      <div id="buzzed-status" class="buzzed-status hidden">
+        <div class="buzzed-card">
+          <span class="buzzed-icon">🔔</span>
+          <span id="buzzed-name-display" class="buzzed-name"></span>
+          <span class="buzzed-waiting">بانتظار حكم الهوست...</span>
+        </div>
+      </div>
+
+      <!-- TEAMS DISPLAY -->
+      <div class="teams-area">
+        <div class="team-box team-red-box">
+          <div class="team-header red-header">
+            <span class="team-dot red-dot"></span>
+            <h3>الفريق الأحمر</h3>
+          </div>
+          <ul id="team-red-players" class="player-list"></ul>
+          <div id="red-guesses" class="team-guesses"></div>
+        </div>
+
+        <div class="team-box team-blue-box">
+          <div class="team-header blue-header">
+            <span class="team-dot blue-dot"></span>
+            <h3>الفريق الأزرق</h3>
+          </div>
+          <ul id="team-blue-players" class="player-list"></ul>
+          <div id="blue-guesses" class="team-guesses"></div>
+        </div>
+      </div>
+
+      <!-- ROUND RESULT OVERLAY -->
+      <div id="result-overlay" class="result-overlay hidden">
+        <div class="result-card">
+          <div class="result-emoji" id="result-emoji">🎉</div>
+          <h2 id="result-title">الجواب الصحيح!</h2>
+          <p id="result-answer" class="result-answer"></p>
+          <p id="result-detail" class="result-detail"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IMAGE LIGHTBOX -->
+  <div id="lightbox" class="lightbox hidden" onclick="closeLightbox()">
+    <div class="lightbox-content">
+      <img id="lightbox-img" src="" alt="صورة مكبرة">
+      <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    </div>
+  </div>
+
+  <!-- ROOM CLOSED OVERLAY -->
+  <div id="closed-overlay" class="result-overlay hidden">
+    <div class="result-card">
+      <div class="result-emoji">😢</div>
+      <h2>الغرفة انقفلت</h2>
+      <p>الهوست طلع من الغرفة</p>
+      <button onclick="location.reload()" class="btn btn-primary" style="margin-top:1rem">رجوع</button>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+
+</html>
