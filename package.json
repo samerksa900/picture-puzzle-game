@@ -1,7 +1,7 @@
 {
   "name": "picture-puzzle-game",
   "version": "1.0.0",
-  "description": "لعبة أحجية الصور أونلاين",
+  "description": "لعبة تحدي الصور أونلاين",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
