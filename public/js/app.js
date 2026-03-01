@@ -1,5 +1,12 @@
 // ========== APP STATE ==========
-const socket = io();
+const socket = io({
+    transports: ['polling', 'websocket'],
+    upgrade: true,
+    reconnection: true,
+    reconnectionAttempts: 10,
+    reconnectionDelay: 1000,
+    timeout: 30000
+});
 let isHost = false;
 let myTeam = null;
 let roomCode = null;
@@ -333,31 +340,85 @@ function handleImageSelect(e, index, slot) {
 
 function checkReady() {
     const allImages = Object.keys(selectedImages).length === imageCount;
-    const hasAnswer = $('answer-input').value.trim().length > 0;
-    $('start-round-btn').disabled = !(allImages && hasAnswer);
+    $('start-round-btn').disabled = !allImages;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     setTimeout(() => {
         const answerField = $('answer-input');
-        if (answerField) answerField.addEventListener('input', checkReady);
+        if (answerField) {
+            answerField.addEventListener('input', checkReady);
+            answerField.addEventListener('change', checkReady);
+            answerField.addEventListener('keyup', checkReady);
+            answerField.addEventListener('paste', () => setTimeout(checkReady, 50));
+        }
     }, 100);
 });
+
+// Compress image before upload
+function compressImage(file, maxWidth = 800, quality = 0.7) {
+    return new Promise((resolve) => {
+        // If file is small enough (< 200KB), skip compression
+        if (file.size < 200 * 1024) {
+            resolve(file);
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+                if (width > maxWidth) {
+                    height = (height * maxWidth) / width;
+                    width = maxWidth;
+                }
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((blob) => {
+                    const compressed = new File([blob], file.name, { type: 'image/jpeg' });
+                    resolve(compressed);
+                }, 'image/jpeg', quality);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
 
 async function startRound() {
     currentAnswer = $('answer-input').value.trim();
     const formData = new FormData();
     formData.append('roomCode', roomCode);
-    formData.append('answer', currentAnswer);
-    for (let i = 0; i < imageCount; i++) {
-        if (selectedImages[i]) formData.append('images', selectedImages[i]);
-    }
+    formData.append('answer', currentAnswer || '');
 
     $('start-round-btn').disabled = true;
+    $('start-round-btn').textContent = '⏳ جاري ضغط الصور...';
+
+    // Compress all images before upload
+    for (let i = 0; i < imageCount; i++) {
+        if (selectedImages[i]) {
+            const compressed = await compressImage(selectedImages[i]);
+            formData.append('images', compressed);
+        }
+    }
+
     $('start-round-btn').textContent = '⏳ جاري الرفع...';
 
     try {
-        const res = await fetch('/upload', { method: 'POST', body: formData });
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
+        const res = await fetch('/upload', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+        });
+        clearTimeout(timeout);
+
         const data = await res.json();
         if (data.success) {
             socket.emit('start-round');
@@ -367,7 +428,14 @@ async function startRound() {
             blockedTeams = [];
             updateUnblockButtons();
         }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        if (err.name === 'AbortError') {
+            alert('الرفع أخذ وقت طويل، جرب صور أصغر');
+        } else {
+            alert('حصل خطأ بالرفع، جرب مرة ثانية');
+        }
+    }
 
     $('start-round-btn').disabled = false;
     $('start-round-btn').textContent = '🚀 ابدأ الجولة';
