@@ -389,52 +389,48 @@ function compressImage(file, maxWidth = 800, quality = 0.7) {
     });
 }
 
+// Convert file to base64 data URL
+function fileToBase64(file) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target.result);
+        reader.readAsDataURL(file);
+    });
+}
+
 async function startRound() {
     currentAnswer = $('answer-input').value.trim();
-    const formData = new FormData();
-    formData.append('roomCode', roomCode);
-    formData.append('answer', currentAnswer || '');
 
     $('start-round-btn').disabled = true;
-    $('start-round-btn').textContent = '⏳ جاري ضغط الصور...';
-
-    // Compress all images before upload
-    for (let i = 0; i < imageCount; i++) {
-        if (selectedImages[i]) {
-            const compressed = await compressImage(selectedImages[i]);
-            formData.append('images', compressed);
-        }
-    }
-
-    $('start-round-btn').textContent = '⏳ جاري الرفع...';
+    $('start-round-btn').textContent = '⏳ جاري التحضير...';
 
     try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 30000); // 30s timeout
-
-        const res = await fetch('/upload', {
-            method: 'POST',
-            body: formData,
-            signal: controller.signal
-        });
-        clearTimeout(timeout);
-
-        const data = await res.json();
-        if (data.success) {
-            socket.emit('start-round');
-            $('upload-area').classList.add('hidden');
-            $('host-actions').classList.remove('hidden');
-            $('new-round-btn').classList.remove('hidden');
-            blockedTeams = [];
-            updateUnblockButtons();
+        // Compress and convert all images to base64
+        const base64Images = [];
+        for (let i = 0; i < imageCount; i++) {
+            if (selectedImages[i]) {
+                const compressed = await compressImage(selectedImages[i]);
+                const base64 = await fileToBase64(compressed);
+                base64Images.push(base64);
+            }
         }
+
+        $('start-round-btn').textContent = '⏳ جاري الإرسال...';
+
+        // Send images through Socket.IO
+        socket.emit('start-round', {
+            images: base64Images,
+            answer: currentAnswer || ''
+        });
+
+        $('upload-area').classList.add('hidden');
+        $('host-actions').classList.remove('hidden');
+        $('new-round-btn').classList.remove('hidden');
+        blockedTeams = [];
+        updateUnblockButtons();
     } catch (err) {
         console.error(err);
-        if (err.name === 'AbortError') {
-            alert('الرفع أخذ وقت طويل، جرب صور أصغر');
-        } else {
-            alert('حصل خطأ بالرفع، جرب مرة ثانية');
-        }
+        alert('حصل خطأ، جرب مرة ثانية');
     }
 
     $('start-round-btn').disabled = false;
