@@ -1,9 +1,7 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -11,41 +9,11 @@ const io = new Server(server, {
   cors: { origin: "*" },
   transports: ['polling', 'websocket'],
   pingTimeout: 30000,
-  pingInterval: 10000
-});
-
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const roomDir = path.join(uploadsDir, req.body.roomCode || 'temp');
-    if (!fs.existsSync(roomDir)) {
-      fs.mkdirSync(roomDir, { recursive: true });
-    }
-    cb(null, roomDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `img_${Date.now()}_${Math.random().toString(36).slice(2, 6)}${ext}`);
-  }
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = /jpeg|jpg|png|gif|webp/;
-    const ext = allowed.test(path.extname(file.originalname).toLowerCase());
-    const mime = allowed.test(file.mimetype);
-    cb(null, ext && mime);
-  }
+  pingInterval: 10000,
+  maxHttpBufferSize: 10 * 1024 * 1024 // 10MB for base64 images
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(uploadsDir));
 
 // ========== ROOMS ==========
 const rooms = {};
@@ -58,31 +26,6 @@ function generateRoomCode() {
   }
   return rooms[code] ? generateRoomCode() : code;
 }
-
-// Upload images
-app.post('/upload', upload.array('images', 4), (req, res) => {
-  if (!req.files || req.files.length === 0) {
-    return res.status(400).json({ error: 'No images uploaded' });
-  }
-  const roomCode = req.body.roomCode;
-  const answer = req.body.answer;
-
-  if (!roomCode || !rooms[roomCode]) {
-    return res.status(400).json({ error: 'Invalid room' });
-  }
-
-  const imagePaths = req.files.map(f => `/uploads/${roomCode}/${f.filename}`);
-
-  rooms[roomCode].currentRound = {
-    images: imagePaths,
-    answer: answer.trim(),
-    buzzed: null,
-    revealed: false,
-    blockedTeams: [] // teams that already got it wrong
-  };
-
-  res.json({ success: true, images: imagePaths });
-});
 
 // ========== SOCKET.IO ==========
 io.on('connection', (socket) => {
@@ -157,23 +100,30 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Host starts round
-  socket.on('start-round', () => {
+  // Host starts round (images sent as base64)
+  socket.on('start-round', (data) => {
     const code = socket.roomCode;
     const room = rooms[code];
     if (!room || room.host !== socket.id) return;
-    if (!room.currentRound) return;
+
+    const images = data.images || [];
+    const answer = data.answer || '';
+
+    room.currentRound = {
+      images: images, // base64 strings
+      answer: answer.trim(),
+      buzzed: null,
+      revealed: false,
+      blockedTeams: []
+    };
 
     room.gameStarted = true;
     room.roundNumber++;
-    room.currentRound.buzzed = null;
-    room.currentRound.revealed = false;
-    room.currentRound.blockedTeams = [];
 
     io.to(code).emit('round-started', {
       roundNumber: room.roundNumber,
-      images: room.currentRound.images,
-      imageCount: room.currentRound.images.length
+      images: images,
+      imageCount: images.length
     });
   });
 
@@ -288,10 +238,6 @@ io.on('connection', (socket) => {
 
     if (socket.isHost) {
       io.to(code).emit('room-closed');
-      const roomDir = path.join(uploadsDir, code);
-      if (fs.existsSync(roomDir)) {
-        fs.rmSync(roomDir, { recursive: true, force: true });
-      }
       delete rooms[code];
     } else {
       room.players = room.players.filter(p => p.id !== socket.id);
